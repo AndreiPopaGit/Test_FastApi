@@ -2,3 +2,4 @@ fastapi
 uvicorn
 mangum
 supabase
+python-multipart
