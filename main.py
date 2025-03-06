@@ -21,8 +21,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Directory to temporarily store uploads before sending to Supabase
-UPLOAD_DIR = "temp_uploads"
+# Use `/tmp` for temporary storage (Vercel's only writable directory)
+UPLOAD_DIR = "/tmp"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.post("/upload/")
@@ -31,25 +31,27 @@ async def upload_image(file: UploadFile = File(...)):
 
     file_path = os.path.join(UPLOAD_DIR, file.filename)
 
-    # Save temporarily
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    # Upload to Supabase Storage
     try:
+        # Save the file temporarily in `/tmp`
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        # Upload to Supabase Storage
         with open(file_path, "rb") as f:
-            upload_response = supabase.storage.from_("Food_images").upload(file.filename, f, {"content-type": file.content_type})
+            supabase.storage.from_("Food_images").upload(file.filename, f, {"content-type": file.content_type})
 
-        # Clean up temp file
-        os.remove(file_path)
-
-        # Get the public URL of the uploaded file
+        # Get public URL
         public_url = f"{SUPABASE_URL}/storage/v1/object/public/Food_images/{file.filename}"
 
         return {"message": "File uploaded successfully", "url": public_url}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        # Always clean up after upload
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
 @app.get("/buckets/")
 def list_buckets():
